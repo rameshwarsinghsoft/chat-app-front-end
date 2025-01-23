@@ -1,0 +1,40 @@
+       // <>
+                //   <div className='message left-message'>
+                //     {msg.message}
+                //     <div>...</div>
+                //   </div>
+                //   {/* <span className="left-message">
+                //     {new Date(msg.timestamp).toLocaleTimeString('en-US', {
+                //       hour: '2-digit',
+                //       minute: '2-digit',
+                //       hour12: false,
+                //     })}
+                //   </span> */}
+                // </>
+
+
+
+                  // useEffect(() => {
+  //   getAllMsg();
+  // }, [senderEmail, receiverEmail, updateOperationSuccess, deleteOperationSuccess]);
+
+
+
+         {messageList.map((msg, index) => (
+            <div key={index}>
+              {msg.senderEmail === senderEmail ?
+                <>
+                  <div className='message left-message'>
+                    {msg.message}
+                    <div onClick={() => { handleClick(msg._id) }} style={{ cursor: 'pointer' }}>...</div>
+                  </div>
+                </>
+                :
+                <>
+                  <div className='message right-message'>
+                    {msg.message}
+                    <div onClick={() => { handleClick(msg._id) }} style={{ cursor: 'pointer' }}>...</div>
+                  </div>
+                </>}
+            </div>
+          ))}

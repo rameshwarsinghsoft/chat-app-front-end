@@ -13,13 +13,19 @@ function Chat() {
   const [users, setUsers] = useState([]);
   const [unreadCount, setUnreadCount] = useState({});
   const receiverEmailRef = useRef(''); // Reference for receiver email to prevent unnecessary re-renders
+  const [showOptions, setShowOptions] = useState(false);
+  const [messageId, setMessageId] = useState(null);
+  const [deleteOperationSuccess, setDeleteOperationSuccess] = useState(false);
+  const [updateOperationSuccess, setUpdateOperationSuccess] = useState(false);
+  const [editModel, setEditModel] = useState(false);
+  const [updatedMessage, setUpdatedMessage] = useState(""); // Store updated message
 
-  // Update the reference for receiverEmail
+  // Sync the latest receiverEmail to the ref to avoid stale closures
   useEffect(() => {
     receiverEmailRef.current = receiverEmail;
   }, [receiverEmail]);
 
-  // Initialize sender email from localStorage
+  // Retrieve the logged-in user's email from localStorage and set senderEmail on component mount
   useEffect(() => {
     const loginUser = localStorage.getItem('user');
     if (loginUser) {
@@ -27,13 +33,13 @@ function Chat() {
     }
   }, []);
 
-  // Establish socket connection and handle socket events
+  // Establish socket connection and handle events for real-time communication
+  // Retrieve all users from the backend and update the user list
   useEffect(() => {
     if (senderEmail) {
       socket = io('http://localhost:4000');
       socket.emit('set_username', senderEmail);
 
-      // Listen for updates to the user list from the server
       socket.on('all_users', (users) => setUsers(users));
 
       return () => {
@@ -43,42 +49,35 @@ function Chat() {
     }
   }, [senderEmail]);
 
-  // Fetch messages when senderEmail or receiverEmail changes
   useEffect(() => {
+    getAllMsg();
+  }, [receiverEmail, updateOperationSuccess, deleteOperationSuccess]);
+
+  const getAllMsg = async () => {
     if (senderEmail && receiverEmail) {
-      axios
-        .get(
+      try {
+        const response = await axios.get(
           `http://localhost:4000/api/message?senderEmail=${senderEmail}&receiverEmail=${receiverEmail}`
-        )
-        .then((response) => setMessageList(response.data.data)) // Set the messages in state
-        .catch((error) => {
-          console.error('Error fetching messages:', error);
-          setMessageList([]); // Handle error and reset message list
-        });
+        );
+        setMessageList(response.data.data);
+        console.log("response.data.data : ", response.data.data)
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+        setMessageList([]);
+      }
     }
-  }, [senderEmail, receiverEmail]);
+  };
 
   // Fetch unread message counts when senderEmail changes
   useEffect(() => {
-    fetchUnreadCounts(); // Fetch unread counts when senderEmail changes
+    fetchUnreadCounts();
   }, [senderEmail]);
-
-  // Mark a message as read by sending a request to the backend
-  const markMessageAsRead = async (senderEmail, receiverEmail) => {
-    try {
-      await axios.put(
-        `http://localhost:4000/api/message/mark-read?senderEmail=${senderEmail}&receiverEmail=${receiverEmail}`
-      );
-    } catch (error) {
-      console.error('Error marking message as read:', error);
-    }
-  };
 
   // Set the receiver email and mark messages as read
   const receiverEmailFun = async (receiverEmail) => {
     setReceiverEmail(receiverEmail);
-    await markMessageAsRead(receiverEmail, senderEmail); // Mark messages as read for the selected user
-    fetchUnreadCounts(); // Refresh unread counts
+    await markMessageAsRead(receiverEmail, senderEmail);
+    fetchUnreadCounts();
   };
 
   // Fetch unread message counts
@@ -94,6 +93,17 @@ function Chat() {
     }
   };
 
+  // Mark a message as read by sending a request to the backend
+  const markMessageAsRead = async (senderEmail, receiverEmail) => {
+    try {
+      await axios.put(
+        `http://localhost:4000/api/message/mark-read?senderEmail=${senderEmail}&receiverEmail=${receiverEmail}`
+      );
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+    }
+  };
+
   // Send a message and update unread counts
   const sendMessage = () => {
     if (message.trim() && receiverEmail && socket) {
@@ -105,12 +115,9 @@ function Chat() {
         time: new Date().toLocaleTimeString(),
       };
 
-      socket.emit('send_message', messageData); // Emit the message to the server
-      setMessageList((prev) => [...prev, { ...messageData, author: 'You' }]); // Add the message to the message list
-      setMessage(''); // Clear the message input field
-
-      // Update unread counts after sending the message
-      fetchUnreadCounts();
+      socket.emit('send_message', messageData);
+      setMessageList((prev) => [...prev, { ...messageData, author: 'You' }]);
+      setMessage('');
     }
   };
 
@@ -118,7 +125,6 @@ function Chat() {
   useEffect(() => {
     if (socket) {
       socket.on('receive_message', async (data) => {
-        // Update message list if the message is for the current receiver
         if (
           data.receiverSocketId === socket.id &&
           data.senderEmail === receiverEmailRef.current
@@ -141,8 +147,103 @@ function Chat() {
     }
   }, [socket, senderEmail]);
 
+  // Toggle edit/delete options
+  const handleClick = (_id) => {
+    console.log("showOptions : ", showOptions)
+    setShowOptions(!showOptions);
+    setMessageId(_id);
+    let msgObj = messageList.find(msg => msg._id === _id);
+    let msg = msgObj.message;
+    setUpdatedMessage(msg);
+  };
+
+  const handleEdit = () => {
+    setShowOptions(!showOptions);
+    setEditModel(true)
+  };
+
+  // Update the message in the backend
+  const updateMessageFun = async () => {
+    try {
+      await axios.put('http://localhost:4000/api/message', {
+        _id: messageId,
+        message: updatedMessage,
+      });
+      setUpdateOperationSuccess(true);
+    } catch (error) {
+      console.error('Error updating message:', error);
+    }
+    setEditModel(false);
+    setMessageId(null)
+  }
+
+  // Emit update message event to notify the server
+  useEffect(() => {
+    if (updateOperationSuccess && receiverEmail && socket) {
+      socket.emit('update_message', { receiverEmail });
+      setUpdateOperationSuccess(false);
+    }
+  }, [updateOperationSuccess, receiverEmail, socket]);
+
+  // Handle update message reflection
+  useEffect(() => {
+    if (socket) {
+      const handleDeleteMessage = (data) => {
+        console.log("Delete message event received:", data);
+        getAllMsg();
+      };
+
+      socket.on("update_reflect", handleDeleteMessage);
+
+      // Clean up the event listener to avoid duplication
+      return () => {
+        socket.off("update_reflect", handleDeleteMessage);
+      };
+    }
+  }, [socket, getAllMsg]);
+
+  // Handle message deletion
+  const handleDelete = async () => {
+    const confirmDelete = window.confirm("Are you sure you want to delete this message?");
+    if (confirmDelete) {
+      const response = await axios.delete(
+        `http://localhost:4000/api/message/${messageId}`
+      );
+      console.log('Delete clicked', response);
+      setDeleteOperationSuccess(true)
+    }
+
+    setShowOptions(!showOptions);
+  };
+
+  // Emit delete message event to notify the server
+  useEffect(() => {
+    if (deleteOperationSuccess && receiverEmail && socket) {
+      socket.emit('delete_message', { receiverEmail });
+      setDeleteOperationSuccess(false);
+    }
+  }, [deleteOperationSuccess, receiverEmail, socket]);
+
+  // Handle delete message reflection
+  useEffect(() => {
+    if (socket) {
+      const handleDeleteMessage = (data) => {
+        console.log("Delete message event received:", data);
+        getAllMsg();
+      };
+
+      socket.on("delete_reflect", handleDeleteMessage);
+
+      // Clean up the event listener to avoid duplication
+      return () => {
+        socket.off("delete_reflect", handleDeleteMessage);
+      };
+    }
+  }, [socket, getAllMsg]);
+
   return (
     <div className="chat-container">
+      {/* Sidebar with User List */}
       <div className="sidebar">
         <h3>User List</h3>
         <div className="user-list">
@@ -160,7 +261,7 @@ function Chat() {
                   }}
                 ></span>
                 {user.name}
-                {/* Add the unread message count */}
+                {/* Display unread message count */}
                 {unreadCount[user.email] > 0 && (
                   <span className="message-count">{unreadCount[user.email]}</span>
                 )}
@@ -170,37 +271,95 @@ function Chat() {
         </div>
       </div>
 
+      {/* Chat Window */}
       <div className="chat-window">
+
+        {/* Chat Header */}
         <div className="chat-header">
           {receiverEmail ? `Chat with ${receiverEmail}` : 'Select a User to Chat'}
         </div>
+
+        {/* Modal for Updating Message */}
+        {editModel && (
+          <div className="modal-overlay">
+            <div className="modal-container">
+              <h1>Update Message</h1>
+              <div className="update-input-group">
+                <label htmlFor="message">Message:</label>
+                <input
+                  type="text"
+                  value={updatedMessage}
+                  onChange={(e) => setUpdatedMessage(e.target.value)}
+                />
+              </div>
+              <div className="button-group">
+                <button className="update-button" onClick={updateMessageFun}>
+                  Update
+                </button>
+                <button
+                  className="cancel-button"
+                  onClick={() => {
+                    setEditModel(false);
+                    setMessageId(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Chat Body */}
         <div className="chat-body">
-          {messageList.map((msg, index) => (
-            <div
-              key={index}
-              className={`message ${msg.author === 'You' ? 'your-message' : 'other-message'}`}
-            >
-              {msg.message}
-              <span className="time">{msg.time}</span> {/* Display message timestamp */}
+          {/* Message List */}
+          {messageList.map((msg) => (
+            <div key={msg._id}>
+              <div className={`message ${msg.senderEmail === senderEmail ? 'left-message' : 'right-message'}`}>
+                <p className='only-message'>{msg.message}</p>
+                <div
+                  className="options-icon"
+                  onClick={() => handleClick(msg._id)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  ...
+
+                  <p className='time'>11:37</p>
+
+                  {/* Modal for Edit/Delete Options */}
+                  {showOptions && messageId === msg._id && (
+                    <div className="modal">
+                      <button className="modal-button" onClick={() => handleEdit(msg._id)}>
+                        Edit
+                      </button>
+                      <button className="modal-button" onClick={() => handleDelete(msg._id)}>
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
         </div>
+
+        {/* Chat Footer */}
         {receiverEmail && (
           <div className="chat-footer">
             <input
               type="text"
               placeholder="Type a message..."
               value={message}
-              onChange={(e) => setMessage(e.target.value)} // Update message state on input change
-              onKeyPress={(e) => e.key === 'Enter' && sendMessage()} // Send message on Enter key press
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
             />
-            <button onClick={sendMessage}>Send</button> {/* Send message on button click */}
+            <button onClick={sendMessage}>Send</button>
           </div>
         )}
       </div>
     </div>
   );
 
-}
+};
 
 export default Chat;

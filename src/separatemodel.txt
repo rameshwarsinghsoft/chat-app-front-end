@@ -1,0 +1,135 @@
+  const OptionsModal = ({ onEdit, onDelete }) => {
+    return (
+      <div className="modal">
+        <button className="modal-button" onClick={onEdit}>
+          Edit
+        </button>
+        <button className="modal-button" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    );
+  };
+
+  // Edit Message Modal Component
+  const EditMessageModal = ({ updatedMessage, setUpdatedMessage, onUpdate, onCancel }) => {
+    return (
+      <div className="modal-overlay">
+        <div className="modal-container">
+          <h1>Update Message</h1>
+          <div className="update-input-group">
+            <label htmlFor="message">Message:</label>
+            <input
+              type="text"
+              value={updatedMessage}
+              onChange={(e) => setUpdatedMessage(e.target.value)}
+            />
+          </div>
+          <div className="button-group">
+            <button className="update-button" onClick={onUpdate}>
+              Update
+            </button>
+            <button className="cancel-button" onClick={onCancel}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="chat-container">
+      {/* Sidebar with User List */}
+      <div className="sidebar">
+        <h3>User List</h3>
+        <div className="user-list">
+          {users.map(
+            (user) =>
+              senderEmail !== user.email && (
+                <div
+                  key={user._id}
+                  className={`user-item ${receiverEmail === user.email ? "active" : ""}`}
+                  onClick={() => console.log("User selected")}
+                >
+                  <span
+                    className="status-icon"
+                    style={{ backgroundColor: user.online ? "green" : "red" }}
+                  ></span>
+                  {user.name}
+                  {unreadCount[user.email] > 0 && (
+                    <span className="message-count">{unreadCount[user.email]}</span>
+                  )}
+                </div>
+              )
+          )}
+        </div>
+      </div>
+
+      {/* Chat Window */}
+      <div className="chat-window">
+        <div className="chat-header">
+          {receiverEmail ? `Chat with ${receiverEmail}` : "Select a User to Chat"}
+        </div>
+
+        {/* Modals */}
+        {showOptions && <OptionsModal onEdit={handleEdit} onDelete={handleDelete} />}
+        {editModel && (
+          <EditMessageModal
+            updatedMessage={updatedMessage}
+            setUpdatedMessage={setUpdatedMessage}
+            onUpdate={updateMessageFun}
+            onCancel={() => {
+              setEditModel(false);
+              setMessageId(null);
+            }}
+          />
+        )}
+
+        <div className="chat-body">
+          {messageList.map((msg) => (
+            <div
+              key={msg._id}
+              className={`message ${msg.senderEmail === senderEmail ? "left-message" : "right-message"
+                }`}
+            >
+              {msg.message}
+              <div
+                className="options-icon"
+                onClick={() => console.log("Options clicked")}
+                style={{ cursor: "pointer" }}
+              >
+                ...
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {receiverEmail && (
+          <div className="chat-footer">
+            <input
+              type="text"
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => console.log(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && console.log("Send message")}
+            />
+            <button onClick={() => console.log("Send message")}>Send</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+
+
+                  {/* {showOptions && (
+                    <div className="modal">
+                      <button className="modal-button" onClick={handleEdit}>
+                        Edit
+                      </button>
+                      <button className="modal-button" onClick={handleDelete}>
+                        Delete
+                      </button>
+                    </div>
+                  )} */}
