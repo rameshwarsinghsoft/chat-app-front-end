@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import './chat.css';
+import './chatOld.css';
 
 let socket = null; // Avoid unnecessary reconnections
 
@@ -25,6 +25,7 @@ function Chat() {
     receiverEmailRef.current = receiverEmail;
   }, [receiverEmail]);
 
+  // Retrieve the logged-in user's email from localStorage and set senderEmail on component mount
   useEffect(() => {
     const loginUser = localStorage.getItem('user');
     if (loginUser) {
@@ -86,7 +87,7 @@ function Chat() {
       const response = await axios.get(
         `http://localhost:4000/api/message/unread?receiverEmail=${senderEmail}`
       );
-      setUnreadCount(response.data.data);
+      setUnreadCount(response.data.data); // Update unread count in the state
     } catch (error) {
       console.error('Error fetching unread counts:', error);
     }
@@ -103,7 +104,7 @@ function Chat() {
     }
   };
 
-  // Send a message
+  // Send a message and update unread counts
   const sendMessage = () => {
     if (message.trim() && receiverEmail && socket) {
       const messageData = {
@@ -121,7 +122,6 @@ function Chat() {
   };
 
   // Listen for incoming messages from the socket server
-  // and update unread counts
   useEffect(() => {
     if (socket) {
       socket.on('receive_message', async (data) => {
@@ -132,31 +132,30 @@ function Chat() {
           setMessageList((prev) => [...prev, { ...data, author: 'Other' }]);
         }
 
+        // Mark the message as read if it is from the current receiver
         if (data.senderEmail === receiverEmailRef.current) {
           await markMessageAsRead(data.senderEmail, senderEmail);
         }
 
+        // Update unread counts on receiving a new message
         fetchUnreadCounts();
       });
 
       return () => {
-        socket.off('receive_message');
+        socket.off('receive_message'); // Clean up listener when component unmounts or socket changes
       };
     }
   }, [socket, senderEmail]);
 
   // Toggle edit/delete options
   const handleClick = (_id) => {
+    console.log("showOptions : ", showOptions)
     setShowOptions(!showOptions);
     setMessageId(_id);
     let msgObj = messageList.find(msg => msg._id === _id);
     let msg = msgObj.message;
     setUpdatedMessage(msg);
   };
-
-  useEffect(() => {
-    console.log("showOptions : ", showOptions)
-  }, [showOptions])
 
   const handleEdit = () => {
     setShowOptions(!showOptions);
@@ -234,151 +233,13 @@ function Chat() {
       };
 
       socket.on("delete_reflect", handleDeleteMessage);
+
+      // Clean up the event listener to avoid duplication
       return () => {
         socket.off("delete_reflect", handleDeleteMessage);
       };
     }
   }, [socket, getAllMsg]);
-
-  useEffect(() => {
-    console.log("editModel : ", editModel)
-  })
-
-  const chatContainerRef = useRef(null);
-
-  // Scroll to the bottom when the component mounts or messages change
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [messageList]); // Runs when the `messageList` changes
-
-  return (
-    <div className="chat-container">
-      {/* <!-- Sidebar --> */}
-      <div className="chat-sidebar">
-        <h3 className="user-list-header">User List</h3>
-        {users.map((user) =>
-        (
-          senderEmail !== user.email ? (
-            <div key={user._id} className="users"
-              onClick={() => receiverEmailFun(user.email)}
-            >
-              <div>
-                <p className={user.online ? 'online' : 'offline'}></p>
-              </div>
-              <div>
-                <img className="user-profile-image" data-initials="RM"
-                  src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTsIG1AkktqpHyOP7Y59-VAjI7D78FzmpXwPg&s" />
-              </div>
-              <div className="user-message-container">
-                <p className="user-name">{user.name}</p>
-                <p className="last-message">today i am on leave</p>
-              </div>
-              <div className="time-and-count">
-                <p className="time">11:20</p>
-                {unreadCount[user.email] > 0 && (
-                  <p className="message-count">{unreadCount[user.email]}</p>
-                )}
-              </div>
-            </div>
-          ) : null
-        ))}
-
-        <div className="logout">
-          <button className="logout-btn">Logout</button>
-        </div>
-      </div>
-
-      {/* <!-- Main Chat Body --> */}
-      <div className="chat-section">
-        <h3 className="user-list-header">{receiverEmail ? `Chat with ${receiverEmail}` : 'Select a User to Chat'}</h3>
-
-        {/* <!-- All Messages --> */}
-        <div className="messages-section" 
-          ref={chatContainerRef}
-          style={{
-            height: "400px",
-            overflowY: "scroll",
-            border: "1px solid #ccc",
-            padding: "10px",
-          }}
-        >
-
-          {editModel && (
-            <div className="modal-overlay">
-              <div className="modal-container">
-                <h1>Update Message</h1>
-                <div className="update-input-group">
-                  <label htmlFor="message">Message:</label>
-                  <input
-                    type="text"
-                    value={updatedMessage}
-                    onChange={(e) => setUpdatedMessage(e.target.value)}
-                  />
-                </div>
-                <div className="button-group">
-                  <button className="update-button" onClick={updateMessageFun}>
-                    Update
-                  </button>
-                  <button
-                    className="cancel-button"
-                    onClick={() => {
-                      setEditModel(false);
-                      setMessageId(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {messageList.map((msg) => (
-            <div key={msg._id}
-              className={`chat-msg ${msg.senderEmail === senderEmail ? "msg-sent" : "msg-received"}`}
-            >
-              <p className="">{msg.message}</p>
-              <p className="chat-msg-time">14:28</p>
-
-              {msg.senderEmail === senderEmail ?
-                <>
-                  <p className="message-actions" onClick={() => handleClick(msg._id)}>...</p>
-                  <p className="chat-msg-seen">
-                    <img src='https://static.xx.fbcdn.net/assets/?revision=2696702603847634&name=platform-agnostic-read-receipts-read&density=1' />
-                    <img src='https://static.xx.fbcdn.net/assets/?revision=2696702603847634&name=platform-agnostic-read-receipts-delivered&density=1' />
-                  </p>
-                </>
-                : null
-              }
-              {showOptions && messageId === msg._id && (
-                <div className="message-actions-btn">
-                  <button className="actions-btn" onClick={() => handleEdit(msg._id)}>edit</button>
-                  <button className="actions-btn" onClick={() => handleDelete(msg._id)}>delete</button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* <!-- Chat Input Section --> */}
-        {receiverEmail && (
-          <div className="chat-input">
-            <input type="text"
-              className="chat-text-input"
-              placeholder="Type your message..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-            />
-            <button className="chat-send-button" onClick={sendMessage}>Send</button>
-          </div>
-        )}
-
-      </div>
-    </div>
-  )
 
   return (
     <div className="chat-container">
